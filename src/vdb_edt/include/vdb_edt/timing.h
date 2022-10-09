@@ -29,205 +29,239 @@
 #include <vector>
 #include <Eigen/StdVector>
 
-template<typename Type>
+template <typename Type>
 using AlignedVector = std::vector<Type, Eigen::aligned_allocator<Type>>;
 
-namespace timing {
+namespace timing
+{
 
-    template<typename T, typename Total, int N>
-    class Accumulator {
-    public:
-        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+template <typename T, typename Total, int N>
+class Accumulator
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        Accumulator()
-                : window_samples_(0),
-                  totalsamples_(0),
-                  window_sum_(0),
-                  sum_(0),
-                  min_(std::numeric_limits<T>::max()),
-                  max_(std::numeric_limits<T>::min()) {}
+    Accumulator()
+        : window_samples_(0), totalsamples_(0), window_sum_(0), sum_(0),
+          min_(std::numeric_limits<T>::max()), max_(std::numeric_limits<T>::min())
+    {
+    }
 
-        void Add(T sample) {
-            if (window_samples_ < N) {
-                samples_[window_samples_++] = sample;
-                window_sum_ += sample;
-            } else {
-                T &oldest = samples_[window_samples_++ % N];
-                window_sum_ += sample - oldest;
-                oldest = sample;
-            }
-            sum_ += sample;
-            ++totalsamples_;
-            if (sample > max_) {
-                max_ = sample;
-            }
-            if (sample < min_) {
-                min_ = sample;
-            }
+    void Add(T sample)
+    {
+        if (window_samples_ < N)
+        {
+            samples_[window_samples_++] = sample;
+            window_sum_ += sample;
         }
-
-        int TotalSamples() const { return totalsamples_; }
-
-        double Sum() const { return sum_; }
-
-        double Mean() const { return sum_ / totalsamples_; }
-
-        double RollingMean() const {
-            return window_sum_ / std::min(window_samples_, N);
+        else
+        {
+            T &oldest = samples_[window_samples_++ % N];
+            window_sum_ += sample - oldest;
+            oldest = sample;
         }
-
-        double Max() const { return max_; }
-
-        double Min() const { return min_; }
-
-        double LazyVariance() const {
-            if (window_samples_ == 0) {
-                return 0.0;
-            }
-            double var = 0;
-            double mean = RollingMean();
-            for (int i = 0; i < std::min(window_samples_, N); ++i) {
-                var += (samples_[i] - mean) * (samples_[i] - mean);
-            }
-            var /= std::min(window_samples_, N);
-            return var;
+        sum_ += sample;
+        ++totalsamples_;
+        if (sample > max_)
+        {
+            max_ = sample;
         }
+        if (sample < min_)
+        {
+            min_ = sample;
+        }
+    }
 
-    private:
-        int window_samples_;
-        int totalsamples_;
-        Total window_sum_;
-        Total sum_;
-        T min_;
-        T max_;
-        T samples_[N];
-    };
+    int TotalSamples() const
+    {
+        return totalsamples_;
+    }
 
-    struct TimerMapValue {
-        TimerMapValue() {}
+    double Sum() const
+    {
+        return sum_;
+    }
 
-        /// Create an accumulator with specified window size.
-        Accumulator<double, double, 50> acc_;
-    };
+    double Mean() const
+    {
+        return sum_ / totalsamples_;
+    }
+
+    double RollingMean() const
+    {
+        return window_sum_ / std::min(window_samples_, N);
+    }
+
+    double Max() const
+    {
+        return max_;
+    }
+
+    double Min() const
+    {
+        return min_;
+    }
+
+    double LazyVariance() const
+    {
+        if (window_samples_ == 0)
+        {
+            return 0.0;
+        }
+        double var  = 0;
+        double mean = RollingMean();
+        for (int i = 0; i < std::min(window_samples_, N); ++i)
+        {
+            var += (samples_[i] - mean) * (samples_[i] - mean);
+        }
+        var /= std::min(window_samples_, N);
+        return var;
+    }
+
+private:
+    int   window_samples_;
+    int   totalsamples_;
+    Total window_sum_;
+    Total sum_;
+    T     min_;
+    T     max_;
+    T     samples_[N];
+};
+
+struct TimerMapValue
+{
+    TimerMapValue() {}
+
+    /// Create an accumulator with specified window size.
+    Accumulator<double, double, 50> acc_;
+};
 
 /**
  * A class that has the timer interface but does nothing. Swapping this in in
  * place of the Timer class (say with a typedef) should allow one to disable
  * timing. Because all of the functions are inline, they should just disappear.
  */
-    class DummyTimer {
-    public:
-        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+class DummyTimer
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        explicit DummyTimer(size_t /*handle*/, bool /*constructStopped*/ = false) {}
+    explicit DummyTimer(size_t /*handle*/, bool /*constructStopped*/ = false) {}
 
-        explicit DummyTimer(std::string const & /*tag*/,
-                            bool /*constructStopped*/ = false) {}
+    explicit DummyTimer(std::string const & /*tag*/, bool /*constructStopped*/ = false) {}
 
-        ~DummyTimer() {}
+    ~DummyTimer() {}
 
-        void Start() {}
+    void Start() {}
 
-        void Stop() {}
+    void Stop() {}
 
-        bool IsTiming() { return false; }
-    };
+    bool IsTiming()
+    {
+        return false;
+    }
+};
 
-    class Timer {
-    public:
-        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+class Timer
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        explicit Timer(size_t handle, bool constructStopped = false);
+    explicit Timer(size_t handle, bool constructStopped = false);
 
-        explicit Timer(std::string const &tag, bool constructStopped = false);
+    explicit Timer(std::string const &tag, bool constructStopped = false);
 
-        ~Timer();
+    ~Timer();
 
-        void Start();
+    void Start();
 
-        void Stop();
+    void Stop();
 
-        bool IsTiming() const;
+    bool IsTiming() const;
 
-    private:
-        std::chrono::time_point<std::chrono::system_clock> time_;
+private:
+    std::chrono::time_point<std::chrono::system_clock> time_;
 
-        bool timing_;
-        size_t handle_;
-    };
+    bool   timing_;
+    size_t handle_;
+};
 
-    class Timing {
-    public:
-        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+class Timing
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-        typedef std::map<std::string, size_t> map_t;
+    typedef std::map<std::string, size_t> map_t;
 
-        friend class Timer;
+    friend class Timer;
 
-        // Definition of static functions to query the timers.
-        static size_t GetHandle(std::string const &tag);
+    // Definition of static functions to query the timers.
+    static size_t GetHandle(std::string const &tag);
 
-        static std::string GetTag(size_t handle);
+    static std::string GetTag(size_t handle);
 
-        static double GetTotalSeconds(size_t handle);
+    static double GetTotalSeconds(size_t handle);
 
-        static double GetTotalSeconds(std::string const &tag);
+    static double GetTotalSeconds(std::string const &tag);
 
-        static double GetMeanSeconds(size_t handle);
+    static double GetMeanSeconds(size_t handle);
 
-        static double GetMeanSeconds(std::string const &tag);
+    static double GetMeanSeconds(std::string const &tag);
 
-        static size_t GetNumSamples(size_t handle);
+    static size_t GetNumSamples(size_t handle);
 
-        static size_t GetNumSamples(std::string const &tag);
+    static size_t GetNumSamples(std::string const &tag);
 
-        static double GetVarianceSeconds(size_t handle);
+    static double GetVarianceSeconds(size_t handle);
 
-        static double GetVarianceSeconds(std::string const &tag);
+    static double GetVarianceSeconds(std::string const &tag);
 
-        static double GetMinSeconds(size_t handle);
+    static double GetMinSeconds(size_t handle);
 
-        static double GetMinSeconds(std::string const &tag);
+    static double GetMinSeconds(std::string const &tag);
 
-        static double GetMaxSeconds(size_t handle);
+    static double GetMaxSeconds(size_t handle);
 
-        static double GetMaxSeconds(std::string const &tag);
+    static double GetMaxSeconds(std::string const &tag);
 
-        static double GetHz(size_t handle);
+    static double GetHz(size_t handle);
 
-        static double GetHz(std::string const &tag);
+    static double GetHz(std::string const &tag);
 
-        static void Print(std::ostream &out);
+    static void Print(std::ostream &out);
 
-        static std::string Print();
+    static std::string Print();
 
-        static std::string SecondsToTimeString(double seconds);
+    static std::string SecondsToTimeString(double seconds);
 
-        static void Reset();
+    static void Reset();
 
-        static const map_t &GetTimers() { return Instance().tagMap_; }
+    static const map_t &GetTimers()
+    {
+        return Instance().tagMap_;
+    }
 
-    private:
-        void AddTime(size_t handle, double seconds);
+private:
+    void AddTime(size_t handle, double seconds);
 
-        static Timing &Instance();
+    static Timing &Instance();
 
-        Timing();
+    Timing();
 
-        ~Timing();
+    ~Timing();
 
-        typedef AlignedVector<TimerMapValue> list_t;
+    typedef AlignedVector<TimerMapValue> list_t;
 
-        list_t timers_;
-        map_t tagMap_;
-        size_t maxTagLength_;
-        std::mutex mutex_;
-    };
+    list_t     timers_;
+    map_t      tagMap_;
+    size_t     maxTagLength_;
+    std::mutex mutex_;
+};
 
 #if ENABLE_MSF_TIMING
-    typedef Timer DebugTimer;
+typedef Timer DebugTimer;
 #else
-    typedef DummyTimer DebugTimer;
+typedef DummyTimer DebugTimer;
 #endif
 
 }  // namespace timing

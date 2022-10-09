@@ -28,21 +28,19 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#include<ros/ros.h>
-#include<iostream>
-#include<string>
-#include<openvdb/openvdb.h>
-#include<openvdb/Grid.h>
-#include<vdb_edt/vdbmap.h>
-
+#include <ros/ros.h>
+#include <iostream>
+#include <string>
+#include <openvdb/openvdb.h>
+#include <openvdb/Grid.h>
+#include <vdb_edt/vdbmap.h>
 
 using namespace std;
 
-
-int main(int argc, char **argv) {
-  ros::init(argc, argv, "VDBEDT");
-  std::string name = "VDBEDT";
-  VDBMap map;
-  ros::spin();
-  return 0;
+int main(int argc, char **argv)
+{
+    ros::init(argc, argv, "VDBEDT");
+    VDBMap map;
+    ros::spin();
+    return 0;
 }
