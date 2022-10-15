@@ -94,7 +94,7 @@ private:
     double VIS_MAP_MAXX, VIS_MAP_MAXY, VIS_MAP_MAXZ;  // for visualization
     double EDT_UPDATE_DURATION;
     double VIS_UPDATE_DURATION;
-    double VIS_SLICE_LEVEL;  // in meters
+    double VIS_SLICE_LEVEL;  // in meters // slice height
 
 protected:
     // Ros related

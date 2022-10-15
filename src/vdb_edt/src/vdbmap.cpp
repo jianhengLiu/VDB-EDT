@@ -70,8 +70,9 @@ VDBMap::VDBMap()
 
     // initialization grid map
     openvdb::initialize();
+    // create grid map, background value is zero
     grid_logocc_ = openvdb::FloatGrid::create(0.0);
-    this->set_voxel_size(*grid_logocc_, VOX_SIZE);
+    set_voxel_size(*grid_logocc_, VOX_SIZE);
     max_coor_dist_   = int(MAX_UPDATE_DIST / VOX_SIZE);
     max_coor_sqdist_ = max_coor_dist_ * max_coor_dist_;
     grid_distance_   = std::make_shared<DynamicVDBEDT>(max_coor_dist_);
@@ -127,9 +128,9 @@ void VDBMap::cloud_callback(const CloudMsg::ConstPtr &pc_msg)
     occu_update_count_++;
     std::cout << "Running " << occu_update_count_ << " updates." << std::endl;
     timing::Timer update_OCC_timer("UpdateOccu");
-    this->update_occmap(grid_logocc_, origin, xyz);
+    update_occmap(grid_logocc_, origin, xyz);
     update_OCC_timer.Stop();
-    timing::Timing::Print(std::cout);
+    // timing::Timing::Print(std::cout);
     msg_ready_ = true;
 }
 
@@ -307,7 +308,10 @@ ros::NodeHandle *VDBMap::get_private_node_handle()
 
 void VDBMap::set_voxel_size(openvdb::GridBase &grid, double vs)
 {
-    const openvdb::math::Vec3d    offset(vs / 2., vs / 2., vs / 2.);
+    // make pos at voxel centere?
+    const openvdb::math::Vec3d offset(vs / 2., vs / 2., vs / 2.);
+    // A Transform relates index space coordinates to world space coordinates that give a spatial context for the discretized data.
+    // https://www.openvdb.org/documentation/doxygen/transformsAndMaps.html
     openvdb::math::Transform::Ptr tf = openvdb::math::Transform::createLinearTransform(vs);
     tf->postTranslate(offset);
     grid.setTransform(tf);
@@ -321,6 +325,9 @@ void VDBMap::setup_parameters()
     pnh->setParam("pcl_topic", "livox_cloud");
     pnh->setParam("world_frame_id", "camera_init");
     pnh->setParam("robot_frame_id", "robot");
+
+    // pnh->setParam("pcl_topic", "cloud_in");
+    // pnh->setParam("world_frame_id", "world");
 }
 
 bool VDBMap::load_mapping_para()
@@ -550,7 +557,7 @@ void VDBMap::visualize_maps(const ros::TimerEvent &)
     if (occu_vis_pub_.getNumSubscribers() > 0)
     {
         CloudMsg cloud_vis;
-        this->grid_message(grid_logocc_, cloud_vis);
+        grid_message(grid_logocc_, cloud_vis);
         occu_vis_pub_.publish(cloud_vis);
     }
 
@@ -559,7 +566,7 @@ void VDBMap::visualize_maps(const ros::TimerEvent &)
     {
         VisMarker slice_maker;
         auto      vis_coor = int(2.0 / VOX_SIZE);
-        this->get_slice_marker(slice_maker, 100, VIS_SLICE_LEVEL, vis_coor * vis_coor);
+        get_slice_marker(slice_maker, 100, VIS_SLICE_LEVEL, vis_coor * vis_coor);
         slice_vis_pub_.publish(slice_maker);
     }
 }
@@ -604,7 +611,7 @@ void VDBMap::grid_to_pcl(FloatGrid::Ptr grid, FloatGrid::ValueType thresh, XYZIC
 void VDBMap::grid_message(FloatGrid::Ptr &grid, CloudMsg &disp_msg)
 {
     pcl::PointCloud<pcl::PointXYZI>::Ptr pcl_cloud(new pcl::PointCloud<pcl::PointXYZI>);
-    this->grid_to_pcl(grid, L_THRESH, pcl_cloud);
+    grid_to_pcl(grid, L_THRESH, pcl_cloud);
     pcl::toROSMsg(*pcl_cloud, disp_msg);
     disp_msg.header.frame_id = worldframeId;
     disp_msg.header.stamp    = ros::Time::now();
@@ -622,10 +629,10 @@ void VDBMap::update_edtmap(const ros::TimerEvent & /*event*/)
     timing::Timer update_DIST_timer("UpdateDIST");
     this->grid_distance_->update();
     update_DIST_timer.Stop();
-    timing::Timing::Print(std::cout);
-    std::cout << "changed: " << grid_distance_->sum_occ_changed
-              << " raised: " << grid_distance_->sum_raised_num
-              << " lowered: " << grid_distance_->sum_lowered_num << std::endl;
+    // timing::Timing::Print(std::cout);
+    // std::cout << "changed: " << grid_distance_->sum_occ_changed
+    //           << " raised: " << grid_distance_->sum_raised_num
+    //           << " lowered: " << grid_distance_->sum_lowered_num << std::endl;
     msg_ready_ = false;
 }
 
@@ -637,9 +644,10 @@ void VDBMap::update_occmap(FloatGrid::Ptr grid_map, const tf::Vector3 &origin, X
     openvdb::Vec3d origin3d(origin.x(), origin.y(), origin.z());
     openvdb::Vec3d origin_ijk = grid_map->worldToIndex(origin3d);
 
-    for (auto point = xyz->begin(); point != xyz->end(); ++point)
+    // TODO: parallel process
+    for (auto &point : *xyz)
     {
-        openvdb::Vec3d p_xyz(point->x, point->y, point->z);
+        openvdb::Vec3d p_xyz(point.x, point.y, point.z);
         openvdb::Vec3d p_ijk = grid_map->worldToIndex(p_xyz);
         openvdb::Vec3d dir(p_ijk - origin_ijk);
         double         range = dir.length();
@@ -653,10 +661,14 @@ void VDBMap::update_occmap(FloatGrid::Ptr grid_map, const tf::Vector3 &origin, X
         //        if (START_RANGE >= std::min(SENSOR_RANGE, range)){
         //            continue;
         //        }
+
+        // search for intersected voxel
+        // TODO: replace with HDDA
         openvdb::math::DDA<openvdb::math::Ray<double>, 0> dda(ray, 0,
                                                               std::min(SENSOR_RANGE, range));
 
-        // decrease occupancy
+        // for each voxel on ray, decrease its occupancy
+        // Approximate method of logodd?: why not logodd? : https://groups.google.com/g/openvdb-forum/c/EU9YJjwobC4?pli=1
         do
         {
             openvdb::Coord ijk(dda.voxel());
@@ -680,7 +692,7 @@ void VDBMap::update_occmap(FloatGrid::Ptr grid_map, const tf::Vector3 &origin, X
 
         } while (dda.time() < dda.maxTime());
 
-        // increase occupancy
+        // for endpoint, increase occupancy
         if ((!truncated) && (range <= SENSOR_RANGE))
         {
             for (int i = 0; i < HIT_THICKNESS; ++i)
@@ -731,8 +743,9 @@ void VDBMap::get_slice_marker(VisMarker &marker, int marker_id, double slice, do
     std_msgs::ColorRGBA c;
     Vec3d               map_min(VIS_MAP_MINX, VIS_MAP_MINY, VIS_MAP_MINZ);
     Vec3d               map_max(VIS_MAP_MAXX, VIS_MAP_MAXY, VIS_MAP_MAXZ);
-    auto                coor_min = dist_map_->worldToIndex(map_min);
-    auto                coor_max = dist_map_->worldToIndex(map_max);
+
+    auto coor_min = dist_map_->worldToIndex(map_min);
+    auto coor_max = dist_map_->worldToIndex(map_max);
 
     if (slice < coor_min.z() || slice > coor_max.z())
     {
